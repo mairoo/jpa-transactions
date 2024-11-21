@@ -195,12 +195,14 @@ public class HybridTxIdGenerator {
     UPDATE balance SET balance = ?, transaction_token = ? WHERE id = ?; -- 잔액과 토큰 업데이트
     ```
 - [잔액 무결성 + 거래 멱등성 보장 예제](/src/main/java/kr/co/pincoin/jpa/service/IdempotentTransactionService.java)
-    상기 쿼리 실행 전에 멱등성 보장 확인
+
+  상기 쿼리 실행 전에 멱등성 보장 확인
     ```sql
     SELECT EXISTS(SELECT 1 FROM transactions WHERE tx_id = ?);  -- txId 중복 체크
     ```
 - [잔액 무결성 + 거래 멱등성 보장 + 재시도](/src/main/java/kr/co/pincoin/jpa/service/ResilientTransactionService.java)
-  - 상기 쿼리와 동일하고 재시도 로직만 추가
+
+  상기 쿼리와 동일하고 재시도 로직만 추가
 
 ## 단위 테스트
 
