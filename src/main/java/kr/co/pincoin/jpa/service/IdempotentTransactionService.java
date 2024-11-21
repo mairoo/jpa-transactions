@@ -19,70 +19,73 @@ public class IdempotentTransactionService {
     private final TransactionRepository transactionRepository;
 
     /**
-     * 비관적 락과 txId를 함께 사용한 멱등성이 보장된 잔액 변경
-     * - 데이터베이스 수준의 락으로 동시성 제어
-     * - txId로 중복 요청 방지
+     * 비관적 락과 멱등성을 조합한 구현
+     * 1. txId로 중복 요청 체크
+     * 2. 비관적 락으로 잔액 테이블 락 획득
+     * 3. 잔액 업데이트 후 거래 기록
      */
     @Transactional
     public boolean processWithPessimisticLock(Long balanceId, BigDecimal amount, String txId) {
-        // 이미 처리된 txId인지 확인 - 멱등성 보장 요건
+        // 멱등성 체크 - 이미 처리된 거래인지 확인
         if (transactionRepository.existsByTxId(txId)) {
             return false; // 이미 처리된 요청
         }
 
-        // 비관적 락으로 Balance 조회
+        // 비관적 락으로 잔액 정보 조회 및 락 획득
         Balance balance = balanceRepository.findByIdWithPessimisticLock(balanceId)
                 .orElseThrow(() -> new EntityNotFoundException("해당 ID의 잔액 정보를 찾을 수 없습니다: " + balanceId));
 
-        // 잔액 변경 및 거래 이력 생성
+        // 잔액 변경 후 저장 (잔액 무결성)
         balance.changeBalance(amount);
-        Transaction transaction = Transaction.create(amount);
-        transaction.updateTxId(txId); // 거래 식별자 설정
-
-        // 변경사항 저장
         balanceRepository.save(balance);
+
+        // 거래 기록 생성 및 저장 (거래 이력)
+        Transaction transaction = Transaction.create(amount);
+        transaction.updateTxId(txId);
         transactionRepository.save(transaction);
 
         return true; // 정상 처리 완료
     }
 
     /**
-     * 낙관적 락과 txId를 함께 사용한 멱등성이 보장된 잔액 변경
-     * - 버전 정보로 동시성 제어
-     * - txId로 중복 요청 방지
+     * 낙관적 락과 멱등성을 조합한 구현
+     * 1. txId로 중복 요청 체크
+     * 2. 낙관적 락(@Version)으로 변경 감지
+     * 3. 잔액 업데이트 후 거래 기록
      */
     @Transactional
     public boolean processWithOptimisticLock(Long balanceId, BigDecimal amount, String txId) {
-        // 이미 처리된 txId인지 확인 - 멱등성 보장 요건
+        // 멱등성 체크 - 이미 처리된 거래인지 확인
         if (transactionRepository.existsByTxId(txId)) {
             return false; // 이미 처리된 요청
         }
 
-        // 낙관적 락으로 Balance 조회
+        // 낙관적 락으로 잔액 정보 조회
         Balance balance = balanceRepository.findByIdWithOptimisticLock(balanceId)
                 .orElseThrow(() -> new EntityNotFoundException("해당 ID의 잔액 정보를 찾을 수 없습니다: " + balanceId));
 
-        // 잔액 변경 및 거래 이력 생성
+        // 잔액 변경 후 저장 (잔액 무결성)
         balance.changeBalance(amount);
-        Transaction transaction = Transaction.create(amount);
-        transaction.updateTxId(txId); // 거래 식별자 설정
-
-        // 변경사항 저장
         balanceRepository.save(balance);
+
+        // 거래 기록 생성 및 저장 (거래 이력)
+        Transaction transaction = Transaction.create(amount);
+        transaction.updateTxId(txId);
         transactionRepository.save(transaction);
 
         return true; // 정상 처리 완료
     }
 
     /**
-     * 유니크 제약 조건과 txId를 함께 사용한 멱등성이 보장된 잔액 변경
-     * - 트랜잭션 토큰으로 동시성 제어
-     * - txId로 중복 요청 방지
+     * 유니크 제약 조건과 멱등성을 조합한 구현
+     * 1. txId와 token으로 중복 요청 체크
+     * 2. 거래 기록 먼저 저장 (실패하면 롤백)
+     * 3. 잔액 업데이트 및 토큰 저장
      */
     @Transactional
     public boolean processWithUniqueConstraint(Long balanceId, BigDecimal amount, String txId,
                                                String transactionToken) {
-        // 이미 처리된 txId인지 확인 - 멱등성 보장 요건
+        // 멱등성 체크 - 이미 처리된 거래인지 확인
         if (transactionRepository.existsByTxId(txId)) {
             return false; // 이미 처리된 요청
         }
@@ -92,21 +95,19 @@ public class IdempotentTransactionService {
             return false; // 이미 처리된 토큰
         }
 
-        // Balance 조회
+        // 잔액 정보 조회
         Balance balance = balanceRepository.findById(balanceId)
                 .orElseThrow(() -> new EntityNotFoundException("해당 ID의 잔액 정보를 찾을 수 없습니다: " + balanceId));
 
-        // 잔액 변경 및 거래 이력 생성
-        balance.changeBalance(amount);
+        // 거래 기록 먼저 생성 및 저장 (실패 시 롤백)
         Transaction transaction = Transaction.create(amount);
-        transaction.updateTxId(txId); // 거래 식별자 설정
-
-        // 트랜잭션 토큰 설정
-        balance.updateTransactionToken(transactionToken);
-
-        // 변경사항 저장
-        balanceRepository.save(balance);
+        transaction.updateTxId(txId);
         transactionRepository.save(transaction);
+
+        // 잔액 변경 및 토큰 설정 후 저장
+        balance.changeBalance(amount);
+        balance.updateTransactionToken(transactionToken);
+        balanceRepository.save(balance);
 
         return true; // 정상 처리 완료
     }
