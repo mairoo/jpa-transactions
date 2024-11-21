@@ -38,22 +38,22 @@ public class ResilientTransactionService {
     public boolean processWithPessimisticLockAndRetry(Long balanceId, BigDecimal amount, String txId) {
         for (int attempts = 0; attempts < MAX_RETRY_ATTEMPTS; attempts++) {
             try {
-                // 이미 처리된 거래인지 확인
+                // 멱등성 체크 - 이미 처리된 거래인지 확인
                 if (transactionRepository.existsByTxId(txId)) {
-                    return false;
+                    return false; // 이미 처리된 요청
                 }
 
-                // 비관적 락으로 잔액 정보 조회
+                // 비관적 락으로 잔액 정보 조회 및 락 획득
                 Balance balance = balanceRepository.findByIdWithPessimisticLock(balanceId)
                         .orElseThrow(() -> new EntityNotFoundException("해당 ID의 잔액 정보를 찾을 수 없습니다: " + balanceId));
 
-                // 잔액 변경 및 거래 이력 생성
+                // 잔액 변경 후 저장 (잔액 무결성)
                 balance.changeBalance(amount);
+                balanceRepository.save(balance);
+
+                // 거래 기록 생성 및 저장 (거래 이력)
                 Transaction transaction = Transaction.create(amount);
                 transaction.updateTxId(txId);
-
-                // 변경사항 저장
-                balanceRepository.save(balance);
                 transactionRepository.save(transaction);
 
                 return true;
@@ -86,22 +86,22 @@ public class ResilientTransactionService {
     public boolean processWithOptimisticLockAndRetry(Long balanceId, BigDecimal amount, String txId) {
         for (int attempts = 0; attempts < MAX_RETRY_ATTEMPTS; attempts++) {
             try {
-                // 이미 처리된 거래인지 확인
+                // 멱등성 체크 - 이미 처리된 거래인지 확인
                 if (transactionRepository.existsByTxId(txId)) {
-                    return false;
+                    return false; // 이미 처리된 요청
                 }
 
                 // 낙관적 락으로 잔액 정보 조회
                 Balance balance = balanceRepository.findByIdWithOptimisticLock(balanceId)
                         .orElseThrow(() -> new EntityNotFoundException("해당 ID의 잔액 정보를 찾을 수 없습니다: " + balanceId));
 
-                // 잔액 변경 및 거래 이력 생성
+                // 잔액 변경 후 저장 (잔액 무결성)
                 balance.changeBalance(amount);
+                balanceRepository.save(balance);
+
+                // 거래 기록 생성 및 저장 (거래 이력)
                 Transaction transaction = Transaction.create(amount);
                 transaction.updateTxId(txId);
-
-                // 변경사항 저장
-                balanceRepository.save(balance);
                 transactionRepository.save(transaction);
 
                 return true;
@@ -135,34 +135,31 @@ public class ResilientTransactionService {
                                                        String txId, String transactionToken) {
         for (int attempts = 0; attempts < MAX_RETRY_ATTEMPTS; attempts++) {
             try {
-                // 이미 처리된 거래인지 확인
+                // 멱등성 체크 - 이미 처리된 거래인지 확인
                 if (transactionRepository.existsByTxId(txId)) {
-                    return false;
+                    return false; // 이미 처리된 요청
                 }
 
-                // 이미 처리된 토큰인지 확인
+                // 이미 처리된 토큰인지 확인 - 트랜잭션 무결성 요건
                 if (balanceRepository.findByTransactionToken(transactionToken).isPresent()) {
-                    return false;
+                    return false; // 이미 처리된 토큰
                 }
 
                 // 잔액 정보 조회
                 Balance balance = balanceRepository.findById(balanceId)
                         .orElseThrow(() -> new EntityNotFoundException("해당 ID의 잔액 정보를 찾을 수 없습니다: " + balanceId));
 
-                // 잔액 변경 및 거래 이력 생성
-                balance.changeBalance(amount);
+                // 거래 기록 먼저 생성 및 저장 (실패 시 롤백)
                 Transaction transaction = Transaction.create(amount);
                 transaction.updateTxId(txId);
-
-                // 트랜잭션 토큰 설정
-                balance.updateTransactionToken(transactionToken);
-
-                // 변경사항 저장
-                balanceRepository.save(balance);
                 transactionRepository.save(transaction);
 
-                return true;
+                // 잔액 변경 및 토큰 설정 후 저장
+                balance.changeBalance(amount);
+                balance.updateTransactionToken(transactionToken);
+                balanceRepository.save(balance);
 
+                return true;
             } catch (DataIntegrityViolationException e) {
                 log.warn("중복 트랜잭션 감지됨. token: {}", transactionToken);
                 return false;
