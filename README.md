@@ -161,28 +161,53 @@ public class HybridTxIdGenerator {
 
 # 소스 코드 바로가기
 
-엔티티
+## 엔티티
 
 - [잔액 엔티티](/src/main/java/kr/co/pincoin/jpa/entity/Balance.java)
 - [거래 엔티티](/src/main/java/kr/co/pincoin/jpa/entity/Transaction.java)
 
-JPA 리파지토리
+## JPA 리파지토리
 
 - [잔액 리파지토리](/src/main/java/kr/co/pincoin/jpa/repository/BalanceRepository.java)
 - [거래 리파지토리](/src/main/java/kr/co/pincoin/jpa/repository/TransactionRepository.java)
 
-서비스
+## 서비스
 
 - [잔액 무결성 보장 예제](/src/main/java/kr/co/pincoin/jpa/service/IntegrityBalanceService.java)
-- [잔액 무결성 + 거래 멱등성 보장 예제](/src/main/java/kr/co/pincoin/jpa/service/IdempotentTransactionService.java)
-- [잔액 무결성 + 거래 멱등성 보장 + 재시도](/src/main/java/kr/co/pincoin/jpa/service/ResilientTransactionService.java)
 
-단위 테스트
+  비관적 락 JPQL
+    ```sql
+    SELECT b.* FROM balance b WHERE b.id = ? FOR UPDATE;    -- 잔액 조회 with 락 획득
+    UPDATE balance SET balance = ?, version = ? WHERE id = ?;   -- 잔액 업데이트
+    INSERT INTO transactions (amount) VALUES (?);   -- 거래 내역 저장
+    ```
+  낙관적 락 JPQL
+    ```sql
+    SELECT b.* FROM balance b WHERE b.id = ?;   -- 잔액 조회
+    UPDATE balance SET balance = ?, version = ? WHERE id = ? AND version = ?;   -- 잔액 업데이트 (버전 체크)
+    INSERT INTO transactions (amount) VALUES (?);   -- 거래 내역 저장
+    ```
+  유니크 제약 조건 JPQL
+    ```sql
+    SELECT b.* FROM balance b WHERE b.transaction_token = ?;    -- 토큰으로 중복 체크
+    SELECT b.* FROM balance b WHERE b.id = ?;   -- 잔액 조회
+    INSERT INTO transactions (amount) VALUES (?);   -- 거래 기록 저장
+    UPDATE balance SET balance = ?, transaction_token = ? WHERE id = ?; -- 잔액과 토큰 업데이트
+    ```
+- [잔액 무결성 + 거래 멱등성 보장 예제](/src/main/java/kr/co/pincoin/jpa/service/IdempotentTransactionService.java)
+    상기 쿼리 실행 전에 멱등성 보장 확인
+    ```sql
+    SELECT EXISTS(SELECT 1 FROM transactions WHERE tx_id = ?);  -- txId 중복 체크
+    ```
+- [잔액 무결성 + 거래 멱등성 보장 + 재시도](/src/main/java/kr/co/pincoin/jpa/service/ResilientTransactionService.java)
+  - 상기 쿼리와 동일하고 재시도 로직만 추가
+
+## 단위 테스트
 
 - [잔액 단위 테스트](/src/test/java/kr/co/pincoin/jpa/entity/BalanceTest.java)
 - [거래 단위 테스트](/src/test/java/kr/co/pincoin/jpa/entity/TransactionTest.java)
 
-서비스 테스트
+## 서비스 테스트
 
 - [잔액 무결성 보장 테스트](src/test/java/kr/co/pincoin/jpa/service/IntegrityBalanceServiceTest.java)
 - [잔액 무결성 보장 + 거래 멱등성 보장 테스트](/src/test/java/kr/co/pincoin/jpa/service/IdempotentTransactionServiceTest.java)

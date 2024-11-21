@@ -32,11 +32,11 @@ public class IntegrityBalanceService {
 
         // 잔액 변경 (입금 또는 출금)
         balance.changeBalance(amount);
-        // 트랜잭션 이력 저장
-        transactionRepository.save(Transaction.create(amount));
-
         // 변경된 잔액 정보 저장
         balanceRepository.save(balance);
+
+        // 트랜잭션 이력 저장
+        transactionRepository.save(Transaction.create(amount));
     }
 
     /**
@@ -53,11 +53,11 @@ public class IntegrityBalanceService {
 
         // 잔액 변경 (입금 또는 출금)
         balance.changeBalance(amount);
-        // 트랜잭션 이력 저장
-        transactionRepository.save(Transaction.create(amount));
-
         // 변경된 잔액 정보 저장
         balanceRepository.save(balance);
+
+        // 트랜잭션 이력 저장
+        transactionRepository.save(Transaction.create(amount));
     }
 
     /**
@@ -78,15 +78,16 @@ public class IntegrityBalanceService {
         Balance balance = balanceRepository.findById(balanceId)
                 .orElseThrow(() -> new EntityNotFoundException("해당 ID의 잔액 정보를 찾을 수 없습니다: " + balanceId));
 
-        // 잔액 변경 (입금 또는 출금)
-        balance.changeBalance(amount);
         // 트랜잭션 이력 저장
         transactionRepository.save(Transaction.create(amount));
 
+        // 잔액 변경 (입금 또는 출금)
+        balance.changeBalance(amount);
         // 처리된 트랜잭션 토큰 설정
         balance.updateTransactionToken(transactionToken);
         // 변경된 잔액 정보 저장
         balanceRepository.save(balance);
+
         // 정상 처리됨을 의미하는 true 반환
         return true;
     }
