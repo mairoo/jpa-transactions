@@ -177,28 +177,39 @@ public class HybridTxIdGenerator {
 
   비관적 락 JPQL
     ```sql
-    SELECT b.* FROM balance b WHERE b.id = ? FOR UPDATE;    -- 잔액 조회 with 락 획득
-    UPDATE balance SET balance = ?, version = ? WHERE id = ?;   -- 잔액 업데이트
-    INSERT INTO transactions (amount) VALUES (?);   -- 거래 내역 저장
+    -- 잔액 조회 with 락 획득
+    SELECT b.* FROM balance b WHERE b.id = ? FOR UPDATE;
+    -- 잔액 업데이트
+    UPDATE balance SET balance = ?, version = ? WHERE id = ?;
+    -- 거래 내역 저장
+    INSERT INTO transactions (amount) VALUES (?);
     ```
   낙관적 락 JPQL
     ```sql
-    SELECT b.* FROM balance b WHERE b.id = ?;   -- 잔액 조회
-    UPDATE balance SET balance = ?, version = ? WHERE id = ? AND version = ?;   -- 잔액 업데이트 (버전 체크)
-    INSERT INTO transactions (amount) VALUES (?);   -- 거래 내역 저장
+    -- 잔액 조회
+    SELECT b.* FROM balance b WHERE b.id = ?;   
+    -- 잔액 업데이트 (버전 체크)
+    UPDATE balance SET balance = ?, version = ? WHERE id = ? AND version = ?;
+    -- 거래 내역 저장
+    INSERT INTO transactions (amount) VALUES (?);   
     ```
   유니크 제약 조건 JPQL
     ```sql
-    SELECT b.* FROM balance b WHERE b.transaction_token = ?;    -- 토큰으로 중복 체크
-    SELECT b.* FROM balance b WHERE b.id = ?;   -- 잔액 조회
-    INSERT INTO transactions (amount) VALUES (?);   -- 거래 기록 저장
-    UPDATE balance SET balance = ?, transaction_token = ? WHERE id = ?; -- 잔액과 토큰 업데이트
+    -- 토큰으로 중복 체크
+    SELECT b.* FROM balance b WHERE b.transaction_token = ?;
+    -- 잔액 조회
+    SELECT b.* FROM balance b WHERE b.id = ?;
+    -- 거래 기록 저장
+    INSERT INTO transactions (amount) VALUES (?);
+    -- 잔액과 토큰 업데이트
+    UPDATE balance SET balance = ?, transaction_token = ? WHERE id = ?;
     ```
 - [잔액 무결성 + 거래 멱등성 보장 예제](/src/main/java/kr/co/pincoin/jpa/service/IdempotentTransactionService.java)
 
-  상기 쿼리 실행 전에 멱등성 보장 확인
+  상기 쿼리 세 케이스 모두 실행 전에 멱등성 보장 확인
     ```sql
-    SELECT EXISTS(SELECT 1 FROM transactions WHERE tx_id = ?);  -- txId 중복 체크
+    -- txId 중복 체크
+    SELECT EXISTS(SELECT 1 FROM transactions WHERE tx_id = ?);  
     ```
 - [잔액 무결성 + 거래 멱등성 보장 + 재시도](/src/main/java/kr/co/pincoin/jpa/service/ResilientTransactionService.java)
 
