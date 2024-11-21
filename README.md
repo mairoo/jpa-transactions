@@ -137,3 +137,32 @@ public class HybridTxIdGenerator {
 | 유니크 제약 | • 구현 단순<br>• DB 레벨 보장<br>• 안정성 높음             | • 유연성 부족<br>• 제약 조건 관리<br>• 성능 영향       | • 주문 번호<br>• 결제 ID<br>• 예약 번호<br>• 좌석 예약 | • unique 인덱스 활용<br>• 멱등성 키 생성<br>• try-catch로 중복 처리                                         |     |
 | 네임드 락  | • 테이블 단위 제어<br>• 세밀한 제어 가능<br>• DB 기능 활용      | • DB 의존성<br>• 데드락 위험<br>• 복잡한 관리        | • 배치 작업<br>• 정산 처리<br>• 대용량 업데이트        | • GET_LOCK() 함수 사용<br>• 타임아웃 설정<br>• 명시적 락 해제                                               |     |
 | 분산 락   | • 다중 서버 지원<br>• 높은 확장성<br>• 유연한 정책 설정         | • 인프라 비용<br>• 네트워크 오버헤드<br>• 구현 복잡도     | • 스케줄러<br>• 캐시 갱신<br>• 결제 처리            | • Redis/Zookeeper 활용<br>• TTL 설정<br>• 락 획득 재시도 로직                                           |     |
+
+# 소스 코드 바로가기
+
+엔티티
+
+- [잔액 엔티티](/src/main/java/kr/co/pincoin/jpa/entity/Balance.java)
+- [거래 엔티티](/src/main/java/kr/co/pincoin/jpa/entity/Transaction.java)
+
+JPA 리파지토리
+
+- [잔액 리파지토리](/src/main/java/kr/co/pincoin/jpa/repository/BalanceRepository.java)
+- [거래 리파지토리](/src/main/java/kr/co/pincoin/jpa/repository/TransactionRepository.java)
+
+서비스
+
+- [잔액 무결성 보장 예제](/src/main/java/kr/co/pincoin/jpa/service/IntegrityBalanceService.java)
+- [잔액 무결성 + 거래 멱등성 보장 예제](/src/main/java/kr/co/pincoin/jpa/service/IdempotentTransactionService.java)
+- [잔액 무결성 + 거래 멱등성 보장 + 재시도](/src/main/java/kr/co/pincoin/jpa/service/ResilientTransactionService.java)
+
+단위 테스트
+
+- [잔액 단위 테스트](/src/test/java/kr/co/pincoin/jpa/entity/BalanceTest.java)
+- [거래 단위 테스트](/src/test/java/kr/co/pincoin/jpa/entity/TransactionTest.java)
+
+서비스 테스트
+
+- [잔액 무결성 보장 테스트](src/test/java/kr/co/pincoin/jpa/service/IntegrityBalanceServiceTest.java)
+- [잔액 무결성 보장 + 거래 멱등성 보장 테스트](/src/test/java/kr/co/pincoin/jpa/service/IdempotentTransactionServiceTest.java)
+- [잔액 무결성 보장 + 거래 멱등성 보장 + 재시도 테스트](/src/test/java/kr/co/pincoin/jpa/service/ResilientTransactionServiceTest.java)

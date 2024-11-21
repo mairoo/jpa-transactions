@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ResilientBalanceService {
+public class ResilientTransactionService {
     // 재시도 관련 설정
     private static final int MAX_RETRY_ATTEMPTS = 3;
     private static final long INITIAL_RETRY_DELAY_MS = 1000; // 1초

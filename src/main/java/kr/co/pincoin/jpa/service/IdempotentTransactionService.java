@@ -13,7 +13,7 @@ import java.math.BigDecimal;
 
 @Service
 @RequiredArgsConstructor
-public class IdempotentBalanceService {
+public class IdempotentTransactionService {
     private final BalanceRepository balanceRepository;
 
     private final TransactionRepository transactionRepository;

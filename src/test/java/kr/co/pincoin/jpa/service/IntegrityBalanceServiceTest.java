@@ -25,9 +25,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @TestPropertySource(properties = {
         "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect"
 })
-class BalanceServiceTest {
+class IntegrityBalanceServiceTest {
     @Autowired
-    private BalanceService balanceService;
+    private IntegrityBalanceService integrityBalanceService;
 
     @Autowired
     private BalanceRepository balanceRepository;
@@ -41,7 +41,7 @@ class BalanceServiceTest {
     void setUp() {
         balanceRepository.deleteAll();
         transactionRepository.deleteAll();
-        testBalance = balanceService.createBalance(new BigDecimal("1000.00"));
+        testBalance = integrityBalanceService.createBalance(new BigDecimal("1000.00"));
     }
 
     @Test
@@ -53,10 +53,10 @@ class BalanceServiceTest {
         for (int i = 0; i < 2; i++) {
             executorService.submit(() -> {
                 try {
-                    balanceService.updateBalanceWithPessimisticLock(
+                    integrityBalanceService.updateBalanceWithPessimisticLock(
                             testBalance.getId(),
                             new BigDecimal("100.00")
-                                                                   );
+                                                                            );
                 } finally {
                     latch.countDown();
                 }
@@ -86,8 +86,8 @@ class BalanceServiceTest {
             executorService.submit(() -> {
                 try {
                     startLatch.await(); // 동시 시작을 위한 대기
-                    balanceService.updateBalanceWithOptimisticLock(testBalance.getId(),
-                                                                   new BigDecimal("100.00"));
+                    integrityBalanceService.updateBalanceWithOptimisticLock(testBalance.getId(),
+                                                                            new BigDecimal("100.00"));
                 } catch (ObjectOptimisticLockingFailureException e) {
                     exceptionCount.incrementAndGet();
                 } catch (InterruptedException e) {
@@ -118,14 +118,14 @@ class BalanceServiceTest {
         String token = UUID.randomUUID().toString();
 
         // 첫 번째 트랜잭션 시도
-        boolean firstResult = balanceService.updateBalanceWithUniqueConstraint(testBalance.getId(),
-                                                                               new BigDecimal("100.00"),
-                                                                               token);
+        boolean firstResult = integrityBalanceService.updateBalanceWithUniqueConstraint(testBalance.getId(),
+                                                                                        new BigDecimal("100.00"),
+                                                                                        token);
 
         // 동일 토큰으로 두 번째 트랜잭션 시도
-        boolean secondResult = balanceService.updateBalanceWithUniqueConstraint(testBalance.getId(),
-                                                                                new BigDecimal("100.00"),
-                                                                                token);
+        boolean secondResult = integrityBalanceService.updateBalanceWithUniqueConstraint(testBalance.getId(),
+                                                                                         new BigDecimal("100.00"),
+                                                                                         token);
 
         assertThat(firstResult)
                 .isTrue()
@@ -142,8 +142,8 @@ class BalanceServiceTest {
 
     @Test
     void insufficientBalanceTest() {
-        assertThatThrownBy(() -> balanceService.updateBalanceWithPessimisticLock(testBalance.getId(),
-                                                                                 new BigDecimal("-2000.00")))
+        assertThatThrownBy(() -> integrityBalanceService.updateBalanceWithPessimisticLock(testBalance.getId(),
+                                                                                          new BigDecimal("-2000.00")))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("잔액이 부족합니다")
                 .as("잔액이 부족한 경우 출금이 실패해야 함");

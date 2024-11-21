@@ -25,7 +25,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class ResilientBalanceServiceTest {
+class ResilientTransactionServiceTest {
     private static final Long BALANCE_ID = 1L;
 
     private static final BigDecimal INITIAL_BALANCE = new BigDecimal("1000.00");
@@ -35,7 +35,7 @@ class ResilientBalanceServiceTest {
     private static final String TRANSACTION_TOKEN = "token-123";
 
     @InjectMocks
-    private ResilientBalanceService resilientBalanceService;
+    private ResilientTransactionService resilientTransactionService;
 
     @Mock
     private BalanceRepository balanceRepository;
@@ -61,7 +61,7 @@ class ResilientBalanceServiceTest {
         given(transactionRepository.save(any(Transaction.class))).willReturn(Transaction.create(new BigDecimal("100")));
 
         // when
-        boolean result = resilientBalanceService
+        boolean result = resilientTransactionService
                 .processWithPessimisticLockAndRetry(BALANCE_ID, new BigDecimal("100"), TX_ID);
 
         // then
@@ -78,7 +78,7 @@ class ResilientBalanceServiceTest {
         given(transactionRepository.existsByTxId(TX_ID)).willReturn(true);
 
         // when
-        boolean result = resilientBalanceService
+        boolean result = resilientTransactionService
                 .processWithPessimisticLockAndRetry(BALANCE_ID, new BigDecimal("100"), TX_ID);
 
         // then
@@ -98,7 +98,7 @@ class ResilientBalanceServiceTest {
         given(balanceRepository.save(any(Balance.class))).willReturn(balance);
 
         // when
-        boolean result = resilientBalanceService
+        boolean result = resilientTransactionService
                 .processWithPessimisticLockAndRetry(BALANCE_ID, new BigDecimal("100"), TX_ID);
 
         // then
@@ -116,7 +116,7 @@ class ResilientBalanceServiceTest {
         given(balanceRepository.save(any(Balance.class))).willReturn(balance);
 
         // when
-        boolean result = resilientBalanceService
+        boolean result = resilientTransactionService
                 .processWithOptimisticLockAndRetry(BALANCE_ID, new BigDecimal("100"), TX_ID);
 
         // then
@@ -134,9 +134,9 @@ class ResilientBalanceServiceTest {
 
         // when & then
         assertThatThrownBy(() ->
-                                   resilientBalanceService.processWithOptimisticLockAndRetry(BALANCE_ID,
-                                                                                             new BigDecimal("100"),
-                                                                                             TX_ID))
+                                   resilientTransactionService.processWithOptimisticLockAndRetry(BALANCE_ID,
+                                                                                                 new BigDecimal("100"),
+                                                                                                 TX_ID))
                 .isInstanceOf(BalanceProcessingException.class)
                 .hasMessageContaining("낙관적 락 처리 실패");
     }
@@ -152,7 +152,7 @@ class ResilientBalanceServiceTest {
         given(balanceRepository.save(any(Balance.class))).willReturn(balance);
 
         // when
-        boolean result = resilientBalanceService
+        boolean result = resilientTransactionService
                 .processWithUniqueConstraintAndRetry(BALANCE_ID, new BigDecimal("100"), TX_ID, TRANSACTION_TOKEN);
 
         // then
@@ -170,7 +170,7 @@ class ResilientBalanceServiceTest {
                 .willReturn(Optional.of(balance));
 
         // when
-        boolean result = resilientBalanceService
+        boolean result = resilientTransactionService
                 .processWithUniqueConstraintAndRetry(BALANCE_ID, new BigDecimal("100"), TX_ID, TRANSACTION_TOKEN);
 
         // then
@@ -189,9 +189,9 @@ class ResilientBalanceServiceTest {
 
         // when & then
         assertThatThrownBy(() ->
-                                   resilientBalanceService.processWithPessimisticLockAndRetry(BALANCE_ID,
-                                                                                              new BigDecimal("-2000"),
-                                                                                              TX_ID))
+                                   resilientTransactionService.processWithPessimisticLockAndRetry(BALANCE_ID,
+                                                                                                  new BigDecimal("-2000"),
+                                                                                                  TX_ID))
                 .isInstanceOf(BalanceProcessingException.class)
                 .hasMessageContaining("잔액 부족");
     }
@@ -206,9 +206,9 @@ class ResilientBalanceServiceTest {
 
         // when & then
         assertThatThrownBy(() ->
-                                   resilientBalanceService.processWithPessimisticLockAndRetry(BALANCE_ID,
-                                                                                              new BigDecimal("100"),
-                                                                                              TX_ID))
+                                   resilientTransactionService.processWithPessimisticLockAndRetry(BALANCE_ID,
+                                                                                                  new BigDecimal("100"),
+                                                                                                  TX_ID))
                 .isInstanceOf(BalanceProcessingException.class)
                 .hasMessageContaining("잔액을 찾을 수 없음");
     }
