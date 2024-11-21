@@ -18,10 +18,10 @@ public class Balance {
 
     private BigDecimal balance;
 
-    @Version
+    @Version // 트랜잭션 무결성을 위한 낙관적 락 기법
     private Long version;
 
-    @Column(unique = true)
+    @Column(unique = true) // 트랜잭션 무결성을 위한 유니크 제약 기법
     private String transactionToken;
 
     /**

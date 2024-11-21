@@ -18,6 +18,13 @@ public class Transaction {
 
     private BigDecimal amount;
 
+    @Column(unique = true) // 멱등성 보장을 위한 거래 식별자 txId 유니크 제약 조건 추가
+    private String txId;
+
+    public void updateTxId(String txId) {
+        this.txId = txId;
+    }
+
     /**
      * 트랜잭션을 생성합니다.
      * 양수: 입금, 음수: 출금
