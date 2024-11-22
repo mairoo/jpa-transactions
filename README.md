@@ -75,20 +75,20 @@ Spring Data JPA 이용한 트랜잭션 무결성과 멱등성
 
 - `@Query`로 직접 JPQL 작성
 - `@Lock(LockModeType.PESSIMISTIC_WRITE)` 비관적 락 획득 명시
-- DB 레벨 접근 제어를 이용하므로 그냥 SELECT(잔액), UPDATE(잔액), INSERT(거래) 기본 로직이 바뀌진 않음
+- DB 레벨 접근 제어를 이용하므로 **SELECT(잔액), UPDATE(잔액), INSERT(거래)** 기본 로직이 바뀌진 않음
 
 ### 낙관적 락
 
 - `@Version` 애노테이션 필드를 추가한다.
 - 조회 때 version 필드 정수값을 가져오고 업데이트할 때 현재 레코드 version 값과 불일치로 업데이트 결과 레코드 수가 0이 되면 `OptimisticLockException` 예외를 발생시켜서 트랜잭션이 롤백 시킴
-- JPA 기능 애플리케이션 레벨 방법이지만 락 기법과 유사하여 SELECT(잔액), UPDATE(잔액), INSERT(거래) 역시 기본 로직 동일
+- JPA 기능 애플리케이션 레벨 방법이지만 락 기법과 유사하여 **SELECT(잔액), UPDATE(잔액), INSERT(거래)** 역시 기본 로직 동일
 
 ### 유니크 제약 조건
 
 - JPA/DB가 자동으로 관리하는 기술적인 식별자 Auto increment PK와 별개로 비즈니스적으로 의미있는 필드 유니크 제약 조건을 걸어줌
 - 유니크 제약 비즈니스 키가 이미 존재한다는 것은 이미 트랜잭션 처리가 완료된 것으로 간주
 - 새 트랜잭션의 비즈니스 키가 다르다면 데이터 처리 완료 후 이 비즈니스 키로 업데이트
-- SELECT(비즈니스 토큰), SELECT(잔액), INSERT(거래), UPDATE(비즈니스 토큰, 잔액)
+- **SELECT(비즈니스 토큰), SELECT(잔액), INSERT(거래), UPDATE(비즈니스 토큰, 잔액)** 토큰 로직 필요
 
 # 중복 거래 방지 전략
 ## 멱등성 보장
