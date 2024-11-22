@@ -26,7 +26,7 @@ public class IntegrityBalanceService {
     // @Transactional: 메서드 전체를 하나의 트랜잭션으로 처리
     @Transactional
     public void updateBalanceWithPessimisticLock(Long balanceId, BigDecimal amount) {
-        // 비관적 락을 사용하여 Balance 조회. 없으면 예외 발생
+        // 비관적 락을 사용하여 잔액 조회. 없으면 예외 발생
         Balance balance = balanceRepository.findByIdWithPessimisticLock(balanceId)
                 .orElseThrow(() -> new EntityNotFoundException("해당 ID의 잔액 정보를 찾을 수 없습니다: " + balanceId));
 
@@ -47,7 +47,7 @@ public class IntegrityBalanceService {
     // @Transactional: 메서드 전체를 하나의 트랜잭션으로 처리
     @Transactional
     public void updateBalanceWithOptimisticLock(Long balanceId, BigDecimal amount) {
-        // 낙관적 락을 사용하여 Balance 조회. 없으면 예외 발생
+        // 낙관적 락을 사용하여 잔액 조회. 없으면 예외 발생
         Balance balance = balanceRepository.findByIdWithOptimisticLock(balanceId)
                 .orElseThrow(() -> new EntityNotFoundException("해당 ID의 잔액 정보를 찾을 수 없습니다: " + balanceId));
 
@@ -74,7 +74,7 @@ public class IntegrityBalanceService {
             return false;
         }
 
-        // Balance 조회. 없으면 예외 발생
+        // 잔액 조회. 없으면 예외 발생
         Balance balance = balanceRepository.findById(balanceId)
                 .orElseThrow(() -> new EntityNotFoundException("해당 ID의 잔액 정보를 찾을 수 없습니다: " + balanceId));
 
