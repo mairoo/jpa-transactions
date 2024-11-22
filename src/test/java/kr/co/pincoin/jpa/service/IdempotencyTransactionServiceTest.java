@@ -26,9 +26,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @TestPropertySource(properties = {
         "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect"
 })
-class IdempotentTransactionServiceTest {
+class IdempotencyTransactionServiceTest {
     @Autowired
-    private IdempotentTransactionService idempotentTransactionService;
+    private IdempotencyTransactionService idempotencyTransactionService;
 
     @Autowired
     private BalanceRepository balanceRepository;
@@ -52,18 +52,18 @@ class IdempotentTransactionServiceTest {
         BigDecimal amount = new BigDecimal("100.00");
 
         // 첫 번째 요청
-        boolean firstResult = idempotentTransactionService.processWithPessimisticLock(
-                testBalance.getId(),
-                amount,
-                txid
-                                                                                     );
-
-        // 동일 txid로 두 번째 요청
-        boolean secondResult = idempotentTransactionService.processWithPessimisticLock(
+        boolean firstResult = idempotencyTransactionService.processWithPessimisticLock(
                 testBalance.getId(),
                 amount,
                 txid
                                                                                       );
+
+        // 동일 txid로 두 번째 요청
+        boolean secondResult = idempotencyTransactionService.processWithPessimisticLock(
+                testBalance.getId(),
+                amount,
+                txid
+                                                                                       );
 
         assertThat(firstResult).isTrue()
                 .as("첫 번째 요청은 성공해야 함");
@@ -86,11 +86,11 @@ class IdempotentTransactionServiceTest {
         for (int i = 0; i < 2; i++) {
             executorService.submit(() -> {
                 try {
-                    idempotentTransactionService.processWithPessimisticLock(
+                    idempotencyTransactionService.processWithPessimisticLock(
                             testBalance.getId(),
                             new BigDecimal("100.00"),
                             UUID.randomUUID().toString()
-                                                                           );
+                                                                            );
                 } finally {
                     latch.countDown();
                 }
@@ -113,18 +113,18 @@ class IdempotentTransactionServiceTest {
         BigDecimal amount = new BigDecimal("100.00");
 
         // 첫 번째 요청
-        boolean firstResult = idempotentTransactionService.processWithOptimisticLock(
-                testBalance.getId(),
-                amount,
-                txid
-                                                                                    );
-
-        // 동일 txid로 두 번째 요청
-        boolean secondResult = idempotentTransactionService.processWithOptimisticLock(
+        boolean firstResult = idempotencyTransactionService.processWithOptimisticLock(
                 testBalance.getId(),
                 amount,
                 txid
                                                                                      );
+
+        // 동일 txid로 두 번째 요청
+        boolean secondResult = idempotencyTransactionService.processWithOptimisticLock(
+                testBalance.getId(),
+                amount,
+                txid
+                                                                                      );
 
         assertThat(firstResult).isTrue()
                 .as("첫 번째 요청은 성공해야 함");
@@ -151,11 +151,11 @@ class IdempotentTransactionServiceTest {
             executorService.submit(() -> {
                 try {
                     startLatch.await();
-                    idempotentTransactionService.processWithOptimisticLock(
+                    idempotencyTransactionService.processWithOptimisticLock(
                             testBalance.getId(),
                             new BigDecimal("100.00"),
                             UUID.randomUUID().toString()
-                                                                          );
+                                                                           );
                     successCount.incrementAndGet();
                 } catch (ObjectOptimisticLockingFailureException e) {
                     failCount.incrementAndGet();
@@ -190,20 +190,20 @@ class IdempotentTransactionServiceTest {
         BigDecimal amount = new BigDecimal("100.00");
 
         // 첫 번째 요청
-        boolean firstResult = idempotentTransactionService.processWithUniqueConstraint(
-                testBalance.getId(),
-                amount,
-                txid,
-                token
-                                                                                      );
-
-        // 동일 txid와 토큰으로 두 번째 요청
-        boolean secondResult = idempotentTransactionService.processWithUniqueConstraint(
+        boolean firstResult = idempotencyTransactionService.processWithUniqueConstraint(
                 testBalance.getId(),
                 amount,
                 txid,
                 token
                                                                                        );
+
+        // 동일 txid와 토큰으로 두 번째 요청
+        boolean secondResult = idempotencyTransactionService.processWithUniqueConstraint(
+                testBalance.getId(),
+                amount,
+                txid,
+                token
+                                                                                        );
 
         assertThat(firstResult).isTrue()
                 .as("첫 번째 요청은 성공해야 함");
@@ -222,11 +222,11 @@ class IdempotentTransactionServiceTest {
         String txid = UUID.randomUUID().toString();
 
         assertThatThrownBy(() ->
-                                   idempotentTransactionService.processWithPessimisticLock(
+                                   idempotencyTransactionService.processWithPessimisticLock(
                                            testBalance.getId(),
                                            new BigDecimal("-2000.00"),
                                            txid
-                                                                                          )
+                                                                                           )
                           )
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("잔액이 부족합니다");

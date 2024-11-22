@@ -1,7 +1,6 @@
 package kr.co.pincoin.jpa.service;
 
 import jakarta.persistence.EntityNotFoundException;
-import jakarta.persistence.LockTimeoutException;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PessimisticLockException;
 import kr.co.pincoin.jpa.entity.Balance;
@@ -21,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ResilientTransactionService {
+public class ResilientTransactionPreRegistryService {
     // 재시도 관련 설정
     private static final int MAX_RETRY_ATTEMPTS = 3;
 
@@ -34,9 +33,14 @@ public class ResilientTransactionService {
     private final TransactionRepository transactionRepository;
 
     /**
-     * 비관적 락을 사용한 잔액 변경 with 지수 백오프(exponential backoff) 재시도
-     * - 실패할 때마다 대기 시간을 2배씩 증가
-     * - 데이터베이스 부하를 고려한 전략
+     * 트랜잭션 처리 프로세스:
+     * 1. 트랜잭션 선등록으로 멱등성 보장 (unique constraint 활용)
+     * 2. 잔액 처리 (비관적 락 활용)
+     * <p>
+     * 일반적인 흐름과 다른 이유:
+     * - exists 쿼리 제거로 성능 최적화
+     * - DB 제약조건을 활용한 안전한 멱등성 보장
+     * - Race condition 원천 방지
      */
     @Transactional
     public boolean processWithPessimisticLockAndRetry(Long balanceId, BigDecimal amount, String txId) {
@@ -44,35 +48,32 @@ public class ResilientTransactionService {
 
         while (attempt < MAX_RETRY_ATTEMPTS) {
             try {
-                // 멱등성 체크 - 이미 처리된 거래인지 확인
-                if (transactionRepository.existsByTxId(txId)) {
-                    return false;
-                }
-
-                // 비관적 락으로 잔액 정보 조회 및 락 획득
-                Balance balance = balanceRepository.findByIdWithPessimisticLock(balanceId)
-                        .orElseThrow(() -> new EntityNotFoundException("해당 ID의 잔액 정보를 찾을 수 없습니다: " + balanceId));
-
-                // 잔액 변경 후 저장 (잔액 무결성)
-                balance.changeBalance(amount);
-                balanceRepository.save(balance);
-
-                // 거래 기록 생성 및 저장 (거래 이력)
+                // 트랜잭션 선등록 시도 (멱등성 체크)
                 Transaction transaction = Transaction.create(amount);
                 transaction.updateTxId(txId);
                 transactionRepository.save(transaction);
 
+                // 비관적 락으로 잔액 조회 및 처리
+                Balance balance = balanceRepository.findByIdWithPessimisticLock(balanceId)
+                        .orElseThrow(() -> new BalanceProcessingException("잔액을 찾을 수 없음: " + balanceId));
+
+                balance.changeBalance(amount);
+                balanceRepository.save(balance);
+
                 return true;
 
-            } catch (PessimisticLockException | LockTimeoutException e) {
+            } catch (DataIntegrityViolationException e) {
+                return false; // 이미 처리된 요청
+            } catch (PessimisticLockException e) {
                 if (attempt >= MAX_RETRY_ATTEMPTS - 1) {
                     log.error("비관적 락 획득 실패 - 최대 재시도 횟수 초과. balanceId: {}", balanceId);
                     throw new BalanceProcessingException("비관적 락 처리 실패", e);
                 }
 
+                // 지수 백오프 적용
                 long delayMs = Math.min(INITIAL_RETRY_DELAY_MS * (1L << attempt), MAX_RETRY_DELAY_MS);
-                log.warn("비관적 락 획득 실패 - 재시도 {}/{}. balanceId: {}. {}ms 후 재시도...", attempt + 1, MAX_RETRY_ATTEMPTS,
-                         balanceId, delayMs);
+                log.warn("비관적 락 획득 실패 - 재시도 {}/{}. balanceId: {}. {}ms 후 재시도...",
+                         attempt + 1, MAX_RETRY_ATTEMPTS, balanceId, delayMs);
 
                 sleep(delayMs);
                 attempt++;
@@ -85,9 +86,14 @@ public class ResilientTransactionService {
     }
 
     /**
-     * 낙관적 락을 사용한 잔액 변경 with 선형 백오프(linear backoff) 재시도
-     * - 실패할 때마다 대기 시간을 일정하게 증가
-     * - 충돌이 덜 심각한 상황에 적합
+     * 트랜잭션 처리 프로세스:
+     * 1. 트랜잭션 선등록으로 멱등성 보장 (unique constraint 활용)
+     * 2. 잔액 처리 (낙관적 락 활용)
+     * <p>
+     * 일반적인 흐름과 다른 이유:
+     * - exists 쿼리 제거로 성능 최적화
+     * - DB 제약조건을 활용한 안전한 멱등성 보장
+     * - Race condition 원천 방지
      */
     @Transactional
     public boolean processWithOptimisticLockAndRetry(Long balanceId, BigDecimal amount, String txId) {
@@ -95,34 +101,32 @@ public class ResilientTransactionService {
 
         while (attempt < MAX_RETRY_ATTEMPTS) {
             try {
-                if (transactionRepository.existsByTxId(txId)) {
-                    return false;
-                }
-
-                // 낙관적 락으로 잔액 정보 조회
-                Balance balance = balanceRepository.findByIdWithOptimisticLock(balanceId)
-                        .orElseThrow(() -> new EntityNotFoundException("해당 ID의 잔액 정보를 찾을 수 없습니다: " + balanceId));
-
-                // 잔액 변경 후 저장 (잔액 무결성)
-                balance.changeBalance(amount);
-                balanceRepository.save(balance);
-
-                // 거래 기록 생성 및 저장 (거래 이력)
+                // 트랜잭션 선등록 시도 (멱등성 체크)
                 Transaction transaction = Transaction.create(amount);
                 transaction.updateTxId(txId);
                 transactionRepository.save(transaction);
 
+                // 낙관적 락으로 잔액 조회 및 처리
+                Balance balance = balanceRepository.findByIdWithOptimisticLock(balanceId)
+                        .orElseThrow(() -> new BalanceProcessingException("잔액을 찾을 수 없음: " + balanceId));
+
+                balance.changeBalance(amount);
+                balanceRepository.save(balance);
+
                 return true;
 
+            } catch (DataIntegrityViolationException e) {
+                return false; // 이미 처리된 요청
             } catch (OptimisticLockException e) {
                 if (attempt >= MAX_RETRY_ATTEMPTS - 1) {
                     log.error("낙관적 락 충돌 - 최대 재시도 횟수 초과. balanceId: {}", balanceId);
                     throw new BalanceProcessingException("낙관적 락 처리 실패", e);
                 }
 
+                // 선형 백오프 적용
                 long delayMs = Math.min(INITIAL_RETRY_DELAY_MS * (attempt + 1), MAX_RETRY_DELAY_MS);
-                log.warn("낙관적 락 충돌 - 재시도 {}/{}. balanceId: {}. {}ms 후 재시도...", attempt + 1, MAX_RETRY_ATTEMPTS,
-                         balanceId, delayMs);
+                log.warn("낙관적 락 충돌 - 재시도 {}/{}. balanceId: {}. {}ms 후 재시도...",
+                         attempt + 1, MAX_RETRY_ATTEMPTS, balanceId, delayMs);
 
                 sleep(delayMs);
                 attempt++;
@@ -134,64 +138,8 @@ public class ResilientTransactionService {
         return false;
     }
 
-    /**
-     * 유니크 제약 조건을 사용한 잔액 변경 with 단순 재시도
-     * - 고정된 대기 시간으로 재시도
-     * - 중복 처리는 실패로 처리하고 종료
-     */
-    @Transactional
-    public boolean processWithUniqueConstraintAndRetry(Long balanceId, BigDecimal amount, String txId,
-                                                       String transactionToken) {
-        int attempt = 0;
+    // Unique Constraint 메소드는 재시도가 불필요하므로 그대로 유지
 
-        while (attempt < MAX_RETRY_ATTEMPTS) {
-            try {
-                if (transactionRepository.existsByTxId(txId)) {
-                    return false;
-                }
-
-                // 이미 처리된 토큰인지 확인 - 트랜잭션 무결성 요건
-                if (balanceRepository.findByTransactionToken(transactionToken).isPresent()) {
-                    return false;
-                }
-
-                // 잔액 정보 조회
-                Balance balance = balanceRepository.findById(balanceId)
-                        .orElseThrow(() -> new EntityNotFoundException("해당 ID의 잔액 정보를 찾을 수 없습니다: " + balanceId));
-
-                // 거래 기록 먼저 생성 및 저장 (실패 시 롤백)
-                Transaction transaction = Transaction.create(amount);
-                transaction.updateTxId(txId);
-                transactionRepository.save(transaction);
-
-                // 잔액 변경 및 토큰 설정 후 저장
-                balance.changeBalance(amount);
-                balance.updateTransactionToken(transactionToken);
-                balanceRepository.save(balance);
-
-                return true;
-            } catch (DataIntegrityViolationException e) {
-                log.warn("중복 트랜잭션 감지됨. token: {}", transactionToken);
-                return false;
-            } catch (Exception e) {
-                if (attempt >= MAX_RETRY_ATTEMPTS - 1) {
-                    handleException("유니크 제약 조건 처리", e, balanceId);
-                    return false;
-                }
-
-                log.warn("유니크 제약 조건 처리 실패 - 재시도 {}/{}. balanceId: {}. {}ms 후 재시도...", attempt + 1, MAX_RETRY_ATTEMPTS,
-                         balanceId, INITIAL_RETRY_DELAY_MS);
-
-                sleep(INITIAL_RETRY_DELAY_MS);
-                attempt++;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 예외 처리 및 로깅을 위한 헬퍼 메서드
-     */
     private void handleException(String operation, Exception e, Long balanceId) {
         switch (e) {
             case EntityNotFoundException _ -> {
