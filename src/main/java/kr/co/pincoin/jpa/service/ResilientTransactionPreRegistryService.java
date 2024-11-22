@@ -138,7 +138,60 @@ public class ResilientTransactionPreRegistryService {
         return false;
     }
 
-    // Unique Constraint 메소드는 재시도가 불필요하므로 그대로 유지
+    /**
+     * 트랜잭션 처리 프로세스:
+     * 1. 트랜잭션 선등록으로 멱등성 보장 (unique constraint 활용)
+     * 2. 잔액 처리 (유니크 제약 조건 활용)
+     * <p>
+     * 일반적인 흐름과 다른 이유:
+     * - exists 쿼리 제거로 성능 최적화
+     * - DB 제약조건을 활용한 안전한 멱등성 보장
+     * - Race condition 원천 방지
+     */
+    @Transactional
+    public boolean processWithUniqueConstraintAndRetry(Long balanceId,
+                                                       BigDecimal amount,
+                                                       String txId,
+                                                       String transactionToken) {
+        int attempt = 0;
+
+        while (attempt < MAX_RETRY_ATTEMPTS) {
+            try {
+                // 트랜잭션 선등록 시도 (멱등성 체크)
+                Transaction transaction = Transaction.create(amount);
+                transaction.updateTxId(txId);
+                transactionRepository.save(transaction);
+
+                // 잔액 조회 및 처리
+                Balance balance = balanceRepository.findById(balanceId)
+                        .orElseThrow(() -> new BalanceProcessingException("잔액을 찾을 수 없음: " + balanceId));
+
+                balance.changeBalance(amount);
+                balance.updateTransactionToken(transactionToken);  // 유니크 제약조건용 토큰 설정
+                balanceRepository.save(balance);
+
+                return true;
+
+            } catch (DataIntegrityViolationException e) {
+                // txId나 transactionToken이 이미 존재하는 경우
+                return false; // 이미 처리된 요청으로 간주
+
+            } catch (Exception e) {
+                if (attempt >= MAX_RETRY_ATTEMPTS - 1) {
+                    handleException("유니크 제약 조건 처리", e, balanceId);
+                    return false;
+                }
+
+                // 고정 지연 시간으로 재시도
+                log.warn("유니크 제약 조건 처리 실패 - 재시도 {}/{}. balanceId: {}. {}ms 후 재시도...",
+                         attempt + 1, MAX_RETRY_ATTEMPTS, balanceId, INITIAL_RETRY_DELAY_MS);
+
+                sleep(INITIAL_RETRY_DELAY_MS);
+                attempt++;
+            }
+        }
+        return false;
+    }
 
     private void handleException(String operation, Exception e, Long balanceId) {
         switch (e) {
