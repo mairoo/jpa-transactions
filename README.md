@@ -267,13 +267,13 @@ SELECT EXISTS(SELECT 1 FROM transactions WHERE tx_id = ?);
 #### exists 방식의 문제점 분석
 
 ```
-[원인] READ_COMMITTED 격리 수준
+[원인] READ_COMMITTED 격리 수준 - 근본 원인이 무엇인지
    ↓
-[발생] TOCTOU (검사 시점과 사용 시점의 불일치) 
+[발생] TOCTOU (검사 시점과 사용 시점의 불일치) - 어떤 취약점이 발생하는지
    ↓
-[결과] Race Condition (동시 접근으로 인한 데이터 불일치)
+[결과] Race Condition (동시 접근으로 인한 데이터 불일치) - 어떤 문제점이 발생하는지
    ↓
-[해결] 유니크 제약조건 (DB 레벨의 무결성 보장)
+[해결] 유니크 제약조건 (DB 레벨의 무결성 보장) - 어떻게 해결하는지
 ```
 
 #### 개선된 구현: 유니크 제약 조건 기반
