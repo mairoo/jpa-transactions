@@ -264,7 +264,7 @@ WHERE id = ?;
 SELECT EXISTS(SELECT 1 FROM transactions WHERE tx_id = ?);
 ```
 
-#### exists 방식의 문제점 분석
+#### exists 방식의 문제점 분석 (READ_COMMITTED 격리수준에서 멱등성과 원자성)
 
 ```
 [원인] READ_COMMITTED 격리 수준 - 근본 원인이 무엇인지
@@ -275,6 +275,32 @@ SELECT EXISTS(SELECT 1 FROM transactions WHERE tx_id = ?);
    ↓
 [해결] 유니크 제약조건 또는 비관적 락 (DB 레벨의 무결성 보장) - 어떻게 해결하는지
 ```
+
+1. 멱등성 체크의 동시성 이슈
+
+* `existsByTxId` 검사만으로는 완벽한 멱등성 보장이 어려움
+* READ_COMMITTED 격리수준에서 동시 접근 가능
+* 여러 트랜잭션이 동시에 exists=false를 읽을 수 있음
+
+2. 하지만 중첩된 안전장치로 정합성 보장
+
+* 첫 번째 안전장치: Balance 테이블 낙관적 락
+  * @Version으로 잔액 변경의 원자성 보장
+  * 두 번째 이후 업데이트는 버전 충돌로 실패
+  * 업데이트 실패 시 이후 거래 저장 로직은 실행되지 않음
+* 두 번째 안전장치: Transaction 테이블 txId unique 제약조건
+  * 첫 번째 안전장치를 통과하더라도
+  * txId unique 제약조건으로 중복 거래 저장 시도 시 실패
+
+3. 결론 및 개선 방안
+
+* 현재도 데이터 정합성은 보장됨
+  * 잔액 원자성 보장 (낙관적 락)
+  * 거래 중복 저장 방지 (unique 제약조건)
+* 더 나은 멱등성 보장을 위한 개선안
+  * 거래 테이블 저장을 먼저 시도하여 멱등성 체크와 저장을 원자적 작업으로
+  * 저장 성공한 하나의 트랜잭션만 잔액 변경 시도
+  * DataIntegrityViolationException으로 깔끔한 중복 처리 감지
 
 #### 개선된 구현: 유니크 제약 조건 기반
 
